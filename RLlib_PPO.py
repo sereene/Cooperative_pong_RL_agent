@@ -14,17 +14,14 @@ from torch import nn
 from pettingzoo.butterfly import cooperative_pong_v5
 
 
-# -----------------------------
 # Custom CNN models
-# -----------------------------
-
 class CNNModelLeft(TorchModelV2, nn.Module):
     """Left paddle policy network (for 'paddle_0')."""
     def __init__(self, obs_space, act_space, num_outputs, *args, **kwargs):
         TorchModelV2.__init__(self, obs_space, act_space, num_outputs, *args, **kwargs)
         nn.Module.__init__(self)
 
-        # 84x84x3 입력 기준 (Pistonball 튜토리얼과 같은 구조)
+        # 84x84x3 입력 기준
         self.model = nn.Sequential(
             nn.Conv2d(3, 32, [8, 8], stride=(4, 4)),
             nn.ReLU(),
@@ -51,10 +48,7 @@ class CNNModelLeft(TorchModelV2, nn.Module):
 
 
 class CNNModelRight(TorchModelV2, nn.Module):
-    """Right paddle policy network (for 'paddle_1').
 
-    일부 채널 수를 바꿔서 왼쪽 정책과 구조를 다르게 만듦.
-    """
     def __init__(self, obs_space, act_space, num_outputs, *args, **kwargs):
         TorchModelV2.__init__(self, obs_space, act_space, num_outputs, *args, **kwargs)
         nn.Module.__init__(self)
@@ -68,7 +62,7 @@ class CNNModelRight(TorchModelV2, nn.Module):
             nn.Conv2d(64, 128, [3, 3], stride=(1, 1)),  # 채널 수 128로 변경
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(6272, 512),  # 출력 크기 변경에 맞는 값 (필요하면 assert로 확인 가능)
+            nn.Linear(6272, 512), 
             nn.ReLU(),
         )
         self.policy_fn = nn.Linear(512, num_outputs)
@@ -97,7 +91,7 @@ def env_creator(config):
         off_screen_penalty=-10,
     )
 
-    # Pistonball 튜토리얼에서와 같은 순서의 래퍼들
+    # Pistonball 튜토리얼과 비슷하게 wrapper 구성함
     env = ss.color_reduction_v0(env, mode="B")        # grayscale
     env = ss.dtype_v0(env, "float32")                 # float32
     env = ss.resize_v1(env, x_size=84, y_size=84)     # 84x84
@@ -112,7 +106,7 @@ if __name__ == "__main__":
 
     env_name = "cooperative_pong_v5_multi_ppo"
 
-    # RLlib에 env 등록 (ParallelPettingZooEnv 사용)
+    # RLlib에 env 등록
     register_env(env_name, lambda config: ParallelPettingZooEnv(env_creator(config)))
 
     # 한 번 env를 만들어서 observation_space / action_space 확인
@@ -128,11 +122,11 @@ if __name__ == "__main__":
     ModelCatalog.register_custom_model("CNNModelRight", CNNModelRight)
 
     # Multi-agent 설정
-    #   - paddle_0  -> left_policy (CNNModelLeft)
-    #   - paddle_1  -> right_policy (CNNModelRight)
+    # paddle_0  : left_policy (CNNModelLeft)
+    # paddle_1  : right_policy (CNNModelRight)
     policies = {
         "left_policy": (
-            None,           # default Policy class (PPOPolicy)
+            None,           
             obs_space,
             act_space,
             {
@@ -160,10 +154,9 @@ if __name__ == "__main__":
         elif agent_id == "paddle_1":
             return "right_policy"
         else:
-            # 안전용 fallback (혹시 이름이 바뀌더라도)
             return "left_policy"
 
-    # PPO 설정 (Pistonball 튜토리얼과 유사한 하이퍼파라미터)
+    # PPO 설정
     config = (
         PPOConfig()
         .environment(env=env_name, clip_actions=True)
@@ -199,7 +192,6 @@ if __name__ == "__main__":
         "PPO",
         name="PPO_cooperative_pong_two_policies",
         stop={
-            # 타임스텝은 필요에 맞게 조절
             "timesteps_total": 5_000_000 if not os.environ.get("CI") else 50_000
         },
         checkpoint_freq=10,
