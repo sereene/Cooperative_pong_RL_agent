@@ -1,13 +1,4 @@
 #!/usr/bin/env python
-"""
-PPO with parameter sharing on PettingZoo Butterfly cooperative_pong_v5,
-implemented in a CleanRL-style single file.
-
-- Multi-agent: 두 paddle(에이전트)를 동일한 네트워크(파라미터 공유)로 학습
-- Parallel API + SuperSuit 벡터화 사용
-- TensorBoard 로깅 포함 (runs/ 디렉토리)
-"""
-
 import argparse
 import os
 import random
@@ -26,57 +17,19 @@ from torch.utils.tensorboard import SummaryWriter
 from pettingzoo.butterfly import cooperative_pong_v5
 
 
-# # PPO Hyperparams
-# lr = 3e-4
-# gamma = 0.99
-# gae_lambda = 0.95
-# clip_ratio = 0.1
-# update_epochs = 4
-# rollout_steps = 2048
-# entropy_coef = 0.01
-# value_coef = 0.5
-# batch_size = 256
-# total_timesteps = 1_000_000
-# minibatch_size = 64
-# clip_vloss = True
-# anneal_lr = True
-# norm_adv = True
-# max_grad_norm = 0.5
-# target_kl = None
-# capture_video = False
-# exp_name = "default"
-# torch_deterministic = True
-# cuda_enabled = True
-# track = False
-# wandb_project_name = "coop-pong-project"
-# wandb_entity = None
-# num_envs = 8
-# num_steps = rollout_steps
-# clip_coef = clip_ratio
-
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    # 기본 메타 설정
     parser.add_argument(
         "--exp-name",
         type=str,
         default=os.path.basename(__file__).rstrip(".py"),
-        help="실험 이름 (run 디렉토리 이름에 포함됨)",
+        help="이름",
     )
     parser.add_argument(
         "--seed",
         type=int,
         default=1,
-        help="랜덤 시드",
-    )
-    parser.add_argument(
-        "--torch-deterministic",
-        type=lambda x: bool(strtobool(x)),
-        default=True,
-        nargs="?",
-        const=True,
-        help="True면 cudnn deterministic 모드 사용",
     )
     parser.add_argument(
         "--cuda",
@@ -84,7 +37,7 @@ def parse_args():
         default=True,
         nargs="?",
         const=True,
-        help="True면 cuda 사용 (가능한 경우)",
+        help="True면 cuda 사용",
     )
     parser.add_argument(
         "--track",
@@ -106,16 +59,8 @@ def parse_args():
         default=None,
         help="wandb 팀/엔티티 이름",
     )
-    parser.add_argument(
-        "--capture-video",
-        type=lambda x: bool(strtobool(x)),
-        default=False,
-        nargs="?",
-        const=True,
-        help="True면 에이전트 플레이 영상을 저장 (videos/ 폴더)",
-    )
 
-    # 알고리즘 하이퍼파라미터
+    # 하이퍼파라미터
     parser.add_argument(
         "--total-timesteps",
         type=int,
@@ -132,7 +77,7 @@ def parse_args():
         "--num-envs",
         type=int,
         default=16,
-        help="벡터 환경 개수 (에이전트 수까지 포함된 총 env 슬롯 개수)",
+        help="벡터 환경 개수",
     )
     parser.add_argument(
         "--num-steps",
@@ -158,13 +103,13 @@ def parse_args():
         "--gae-lambda",
         type=float,
         default=0.95,
-        help="GAE의 λ",
+        help="GAE의 람다값",
     )
     parser.add_argument(
         "--num-minibatches",
         type=int,
         default=4,
-        help="배치 쪼갤 미니배치 개수",
+        help="미니배치 개수",
     )
     parser.add_argument(
         "--update-epochs",
@@ -184,7 +129,7 @@ def parse_args():
         "--clip-coef",
         type=float,
         default=0.1,
-        help="PPO surrogate clipping 계수 ε",
+        help="PPO surrogate clipping 계수",
     )
     parser.add_argument(
         "--clip-vloss",
@@ -323,7 +268,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    # 디바이스 선택 (GPU 우선)
+    # 디바이스 선택
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     print("Using device:", device)
 
@@ -346,22 +291,16 @@ if __name__ == "__main__":
     # cooperative_pong 한 env에 2 agents 있으므로, total slots = (num_envs // 2) * 2
     envs = ss.concat_vec_envs_v1(
         env,
-        args.num_envs // n_agents,
+        args.num_envs // n_agents, 
+        #총 슬롯 개수 // 에이전트 개수 = 환경
+        #8개의 환경 × 2 에이전트 = 총 16 슬롯
         num_cpus=0,
         base_class="gymnasium",
     )
 
-    # CleanRL 스타일 보정
     envs.single_observation_space = envs.observation_space
     envs.single_action_space = envs.action_space
     envs.is_vector_env = True
-    
-    if args.capture_video:
-        envs = gym.wrappers.RecordVideo(envs, f"videos/{run_name}")
-
-    assert isinstance(
-        envs.single_action_space, gym.spaces.Discrete
-    ), "현재 구현은 Discrete action space만 지원"
 
     #  Agent & buffer
     agent = Agent(envs).to(device)
@@ -480,7 +419,7 @@ if __name__ == "__main__":
 
             returns = advantages + values
 
-        #  Flatten batch (PPO 업데이트용)
+        #  Flatten batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
@@ -575,7 +514,7 @@ if __name__ == "__main__":
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
         
         
-        # --- TD Error Window Logging ---
+        #  TD Error Logging 
         td_error_history.extend(td_errors.flatten().tolist())
 
         if len(td_error_history) >= window_size:
